@@ -1,0 +1,11 @@
+service: github-secgrp-updater
+
+provider:
+  name: aws
+  runtime: python3.6
+
+functions:
+  hello:
+    handler: handler.hello
+    events:
+      - schedule: rate(24 hours)
