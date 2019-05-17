@@ -8,7 +8,9 @@ This tool uses the [Serverless Framework](https://serverless.com/) for deploymen
 
 ## How it works
 
-This will take 
+This will take the current set of webhook IP ranges from [GitHub's API](https://api.github.com/meta), and maintain a new security group allowing these IP ranges on ports 80 and 443.
+
+This can maintain a security group across multiple VPCs.
 
 ## Configuration, Installation & Deployment
 
@@ -20,11 +22,10 @@ All variables live under the prefix of `/github_secgrp_updater/{STAGE}`. Replace
 
 Relevant variables are shown in the table below.
 
-|----------------------|----------|---------------------|-------------|
 | Variable             | Required | Default Value       | Description |
+|----------------------|----------|---------------------|-------------|
 | /vpc_ids             | Yes      |                     | A comma separated list of VPC IDs in which to maintain a security group. |
 | /secgrp_name         | No       | AllowGitHubWebhooks | Override the name of the maintained security group |
-|----------------------|----------|---------------------|-------------|
 
 
 Finally, deploy with the following
@@ -41,3 +42,10 @@ This supports the serverless framework's concept of stages. Deploy additional st
 ```
 serverless deploy --stage prod
 ```
+
+## Contributions & Changelog
+Please see the [GitHub Releases page](https://github.com/hreeder/lambda-github-secgroup-updater/releases) for the changelog of this tool.
+
+Releases will be properly versioned following [Semantic Versioning](https://semver.org/).
+
+Contributions are welcome, in the form of either issues or pull requests.
