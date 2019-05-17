@@ -3,9 +3,46 @@ service: github-secgrp-updater
 provider:
   name: aws
   runtime: python3.6
+  stage: ${self:custom.stage}
+  region: ${self:custom.region}
+
+  environment:
+    STAGE: ${self:custom.stage}
+
+  iamRoleStatements:
+    # SSM (For configuration)
+    - Effect: Allow
+      Action:
+        - SSM:GetParameter
+        - SSM:GetParameters
+      Resource:
+        Fn::Join:
+          - ""
+          - - 'arn:aws:ssm:${self:custom.region}:'
+            - Ref: 'AWS::AccountId'
+            - ':parameter/github_secgrp_updater/*'
+    # Security Groups
+    - Effect: Allow
+      Action:
+        - EC2:DescribeSecurityGroups
+        - EC2:CreateSecurityGroup
+        - EC2:AuthorizeSecurityGroupIngress
+        - EC2:RevokeSecurityGroupIngress
+        - EC2:RevokeSecurityGroupEgress
+      Resource: '*'
+
+custom:
+  stage: ${opt:stage, 'dev'}
+  region: ${opt:region, 'eu-west-1'}
+
+  pythonRequirements:
+    dockerizePip: non-linux
 
 functions:
-  hello:
-    handler: handler.hello
+  runner:
+    handler: handler.handle
     events:
       - schedule: rate(24 hours)
+
+plugins:
+  - serverless-python-requirements
