@@ -1,0 +1,13 @@
+name: AWS Lambda GitHub Security Group Updater
+version: 1.0.0
+origin: Personal Development
+maintainers:
+  - harry.reeder@cloudreach.com
+cloud_service_providers:
+  - aws
+tags:
+  - aws
+  - automation
+  - lambda
+  - security
+
