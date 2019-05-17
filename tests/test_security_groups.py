@@ -22,22 +22,28 @@ class TestSecurityGroups(unittest.TestCase):
 
         self.default_managed_group_name = 'AllowGitHubWebhooks'
 
+        self.unmanaged_id = "123abc"
         self.managed_id = "abc123"
         self.managed_id_2 = "def456"
-        self.unmanaged_id = "123abc"
 
-        self.managed_sg = {
-            "GroupId": f'sg-{self.managed_id}',
-            "VpcId": f'vpc-{self.managed_id}'
-        }
         self.unmanaged_sg = {
             "GroupId": f'sg-{self.unmanaged_id}',
             "VpcId": f'vpc-{self.unmanaged_id}'
         }
+        self.managed_sg = {
+            "GroupId": f'sg-{self.managed_id}',
+            "VpcId": f'vpc-{self.managed_id}',
+            "IpPermissionsEgress": [],
+            "IpPermissions": []
+        }
         self.managed_sg_2 = {
             "GroupId": f'sg-{self.managed_id_2}',
-            "VpcId": f'vpc-{self.managed_id_2}'
+            "VpcId": f'vpc-{self.managed_id_2}',
+            "IpPermissionsEgress": [],
+            "IpPermissions": []
         }
+
+        self.allowed_ranges = ['192.0.2.0/24', '198.51.100.0/24', '203.0.113.0/24']
 
     def test_get_sec_groups_with_default_name(self):
         """ Tests that security groups with the default name are retrieved successfully """
@@ -51,7 +57,7 @@ class TestSecurityGroups(unittest.TestCase):
                 self.default_managed_group_name
             )
 
-            self.assertIn(f'sg-{self.managed_id}', result)
+            self.assertIn(f'sg-{self.managed_id}', [group['GroupId'] for group in result])
             self.stubber.assert_no_pending_responses()
 
     def test_get_sec_groups_does_not_manage_undefined_vpcs(self):
@@ -73,7 +79,7 @@ class TestSecurityGroups(unittest.TestCase):
                 self.default_managed_group_name
             )
 
-            self.assertNotIn(f'sg-{self.unmanaged_id}', result)
+            self.assertNotIn(f'sg-{self.unmanaged_id}', [group['GroupId'] for group in result])
             self.stubber.assert_no_pending_responses()
 
     def test_get_sec_groups_creates_group(self):
@@ -105,7 +111,7 @@ class TestSecurityGroups(unittest.TestCase):
                 self.default_managed_group_name
             )
 
-            self.assertIn(f'sg-{self.managed_id}', result)
+            self.assertIn(f'sg-{self.managed_id}', [group['GroupId'] for group in result])
             self.stubber.assert_no_pending_responses()
 
     def test_get_sec_groups_creates_group_multiple(self):
@@ -162,59 +168,198 @@ class TestSecurityGroups(unittest.TestCase):
             self.assertEqual(0, len(result))
             self.stubber.assert_no_pending_responses()
 
-    @responses.activate
-    def test_update_sec_groups(self):
-        """
-            Test the actual run function to know if security groups have been updated
-        """
-        ranges = ['192.0.2.0/24', '198.51.100.0/24', '203.0.113.0/24']
-        responses.add(responses.GET, 'https://api.github.com/meta', json={'hooks': ranges})
+    # @responses.activate
+    # def test_update_sec_groups(self):
+    #     """
+    #         Test the actual run function to know if security groups have been updated
+    #     """
+    #     responses.add(
+    #         responses.GET,
+    #         'https://api.github.com/meta',
+    #         json={'hooks': self.allowed_ranges}
+    #     )
 
-        mock_describe_response = {
-            'SecurityGroups': [self.managed_sg, self.managed_sg_2]
-        }
-        expected_describe_params = {'GroupNames': [self.default_managed_group_name]}
+    #     mock_describe_response = {
+    #         'SecurityGroups': [self.managed_sg, self.managed_sg_2]
+    #     }
+    #     expected_describe_params = {'GroupNames': [self.default_managed_group_name]}
+    #     self.stubber.add_response(
+    #         'describe_security_groups',
+    #         mock_describe_response,
+    #         expected_describe_params
+    #     )
+
+    #     expected_update_params_1 = {
+    #         'GroupId': f'sg-{self.managed_id}',
+    #         'IpPermissions': [
+    #             {
+    #                 'FromPort': 443,
+    #                 'ToPort': 443,
+    #                 'IpProtocol': 'tcp',
+    #                 'IpRanges': [{'CidrIp': ip_range} for ip_range in self.allowed_ranges]
+    #             }
+    #         ]
+    #     }
+    #     expected_update_params_2 = {
+    #         'GroupId': f'sg-{self.managed_id_2}',
+    #         'IpPermissions': [
+    #             {
+    #                 'FromPort': 443,
+    #                 'ToPort': 443,
+    #                 'IpProtocol': 'tcp',
+    #                 'IpRanges': [{'CidrIp': ip_range} for ip_range in self.allowed_ranges]
+    #             }
+    #         ]
+    #     }
+
+    #     self.stubber.add_response(
+    #         'update_security_group_rule_descriptions_ingress',
+    #         {},
+    #         expected_update_params_1
+    #     )
+    #     self.stubber.add_response(
+    #         'update_security_group_rule_descriptions_ingress',
+    #         {},
+    #         expected_update_params_2
+    #     )
+
+    #     with self.stubber:
+    #         main.run([f'vpc-{self.managed_id}', f'vpc-{self.managed_id_2}'])
+
+    #         self.stubber.assert_no_pending_responses()
+
+    def test_update_security_group_adds_rules(self):
+        """ Test update_security_group adds correct rules """
         self.stubber.add_response(
-            'describe_security_groups',
-            mock_describe_response,
-            expected_describe_params
-        )
-
-        expected_update_params_1 = {
-            'GroupId': f'sg-{self.managed_id}',
-            'IpPermissions': [
-                {
-                    'FromPort': 443,
-                    'ToPort': 443,
-                    'IpProtocol': 'tcp',
-                    'IpRanges': [{'CidrIp': ip_range} for ip_range in ranges]
-                }
-            ]
-        }
-        expected_update_params_2 = {
-            'GroupId': f'sg-{self.managed_id_2}',
-            'IpPermissions': [
-                {
-                    'FromPort': 443,
-                    'ToPort': 443,
-                    'IpProtocol': 'tcp',
-                    'IpRanges': [{'CidrIp': ip_range} for ip_range in ranges]
-                }
-            ]
-        }
-
-        self.stubber.add_response(
-            'update_security_group_rule_descriptions_ingress',
+            'authorize_security_group_ingress',
             {},
-            expected_update_params_1
-        )
-        self.stubber.add_response(
-            'update_security_group_rule_descriptions_ingress',
-            {},
-            expected_update_params_2
+            {
+                "GroupId": f'sg-{self.managed_id}',
+                "IpPermissions": [{
+                    "FromPort": port,
+                    "ToPort": port,
+                    "IpProtocol": "tcp",
+                    "IpRanges": [{
+                        "Description": "GitHub",
+                        "CidrIp": ip_range
+                    } for ip_range in self.allowed_ranges]
+                } for port in [80, 443]]
+            }
         )
 
         with self.stubber:
-            main.run([f'vpc-{self.managed_id}', f'vpc-{self.managed_id_2}'])
+            main.update_security_group(self.managed_sg, self.allowed_ranges)
 
             self.stubber.assert_no_pending_responses()
+
+    def test_update_security_group_adds_partial_rules(self):
+        """ Test update_security_group only adds relevant rules """
+        self.stubber.add_response(
+            'authorize_security_group_ingress',
+            {},
+            {
+                "GroupId": f'sg-{self.managed_id}',
+                "IpPermissions": [{
+                    "FromPort": port,
+                    "ToPort": port,
+                    "IpProtocol": "tcp",
+                    "IpRanges": [{
+                        "Description": "GitHub",
+                        "CidrIp": ip_range
+                    } for ip_range in self.allowed_ranges[1:]]
+                } for port in [80, 443]]
+            }
+        )
+
+        with self.stubber:
+            main.update_security_group({
+                "GroupId": f'sg-{self.managed_id}',
+                "VpcId": f'vpc-{self.managed_id}',
+                "IpPermissionsEgress": [],
+                "IpPermissions": [{
+                    "FromPort": port,
+                    "ToPort": port,
+                    "IpRanges": [{
+                        "Description": "GitHub",
+                        "CidrIp": self.allowed_ranges[0]
+                    }]
+                } for port in [80, 443]]
+            }, self.allowed_ranges)
+
+            self.stubber.assert_no_pending_responses()
+
+    def test_update_security_group_removes_ingress_rules(self):
+        """ Test update_security_group removes any rules NOT in the allowed list """
+        ranges = [item for item in self.allowed_ranges] # This MUST be a copy, not a reference
+        ranges.append("10.0.0.0/8")
+
+        self.stubber.add_response(
+            'revoke_security_group_ingress',
+            {},
+            {
+                "GroupId": f'sg-{self.managed_id}',
+                "IpPermissions": [{
+                    "FromPort": port,
+                    "ToPort": port,
+                    "IpProtocol": "tcp",
+                    "IpRanges": [{
+                        "Description": "GitHub",
+                        "CidrIp": "10.0.0.0/8"
+                    }]
+                } for port in [80, 443]]
+            }
+        )
+
+        with self.stubber:
+            main.update_security_group({
+                "GroupId": f'sg-{self.managed_id}',
+                "VpcId": f'vpc-{self.managed_id}',
+                "IpPermissionsEgress": [],
+                "IpPermissions": [{
+                    "FromPort": port,
+                    "ToPort": port,
+                    "IpRanges": [{
+                        "Description": "GitHub",
+                        "CidrIp": ip_range
+                    } for ip_range in ranges]
+                } for port in [80, 443]]
+            }, self.allowed_ranges)
+
+            self.stubber.assert_no_pending_responses()
+
+    def test_update_security_group_removes_egress_rules(self):
+        """ Test update_security_group removes ALL egress rules """
+        self.stubber.add_response(
+            'revoke_security_group_egress',
+            {},
+            {
+                "GroupId": f'sg-{self.managed_id}',
+                "IpPermissions": [{
+                    "FromPort": 80,
+                    "ToPort": 80,
+                    "IpProtocol": "tcp",
+                    "IpRanges": [{
+                        "Description": "TestNet",
+                        "CidrIp": "0.0.0.0/0"
+                    }]
+                }]
+            }
+        )
+
+        with self.stubber:
+            main.update_security_group({
+                "GroupId": f'sg-{self.managed_id}',
+                "VpcId": f'vpc-{self.managed_id}',
+                "IpPermissionsEgress": [{
+                    "FromPort": 80,
+                    "ToPort": 80,
+                    "IpProtocol": "tcp",
+                    "IpRanges": [{
+                        "Description": "TestNet",
+                        "CidrIp": "0.0.0.0/0"
+                    }]
+                }],
+                "IpPermissions": []
+            }, [])
+
+        self.stubber.assert_no_pending_responses()

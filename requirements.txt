@@ -1,0 +1,4 @@
+requests>=2.21.0,<3
+
+pytest==4.4.1
+pytest-cov==2.7.1

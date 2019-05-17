@@ -48,30 +48,30 @@ def get_or_create_secgroups(
     Returns:
         List of security group IDs
     """
-    group_ids = []
+    groups = []
     try:
         existing = EC2.describe_security_groups(GroupNames=[security_group_name])
-        group_ids = [
-            group['GroupId'] for group in existing['SecurityGroups'] if group['VpcId'] in vpc_ids
+        groups = [
+            group for group in existing['SecurityGroups'] if group['VpcId'] in vpc_ids
         ]
 
-        if len(group_ids) != len(vpc_ids):
-            vpcs_with_sec_groups = set(group['VpcId'] for group in existing['SecurityGroups'])
+        if len(groups) != len(vpc_ids):
+            vpcs_with_sec_groups = set(group['VpcId'] for group in groups)
             vpcs_without_sec_group = set(vpc_ids) - vpcs_with_sec_groups
 
             for vpc_id in vpcs_without_sec_group:
-                group_ids.append(_create_secgroup(vpc_id, security_group_name)['GroupId'])
+                groups.append(_create_secgroup(vpc_id, security_group_name)['GroupId'])
 
     except botocore.exceptions.ClientError as ex:
         if ex.response['Error']['Code'] == 'InvalidGroup.NotFound':
             for vpc_id in vpc_ids:
-                group_ids.append(_create_secgroup(vpc_id, security_group_name)['GroupId'])
+                groups.append(_create_secgroup(vpc_id, security_group_name))
         else:
             LOGGER.error('Unexpected Boto3 Error', exc_info=True)
             return []   # Given this returns a list of Group IDs, returning an empty
                         # list will prevent further code running
 
-    return group_ids
+    return groups
 
 
 def get_github_ips() -> List[str]:
@@ -90,23 +90,71 @@ def get_github_ips() -> List[str]:
     return data['hooks']
 
 
+def update_security_group(
+        group: dict,
+        ip_ranges: list
+) -> None:
+    """ Updates an individual security group """
+    print(group)
+
+    current_ranges = set()
+    for ip_permission in group['IpPermissions']:
+        for ip_range in ip_permission['IpRanges']:
+            current_ranges.add(ip_range['CidrIp'])
+
+    ranges_to_add = sorted(set(ip_ranges) - current_ranges)
+    if ranges_to_add:
+        ingresses = [{
+            "FromPort": port,
+            "ToPort": port,
+            "IpProtocol": "tcp",
+            "IpRanges": [{
+                "Description": "GitHub",
+                "CidrIp": ip_range
+            } for ip_range in ranges_to_add]
+        } for port in [80, 443]]
+
+        EC2.authorize_security_group_ingress(
+            GroupId=group['GroupId'],
+            IpPermissions=ingresses
+        )
+
+    ranges_to_remove = sorted(current_ranges - set(ip_ranges))
+    if ranges_to_remove:
+        ingresses = [{
+            "FromPort": port,
+            "ToPort": port,
+            "IpProtocol": "tcp",
+            "IpRanges": [{
+                "Description": "GitHub",
+                "CidrIp": ip_range
+            } for ip_range in ranges_to_remove]
+        } for port in [80, 443]]
+
+        EC2.revoke_security_group_ingress(
+            GroupId=group['GroupId'],
+            IpPermissions=ingresses
+        )
+
+    if group['IpPermissionsEgress']:
+        EC2.revoke_security_group_egress(
+            GroupId=group['GroupId'],
+            IpPermissions=group['IpPermissionsEgress']
+        )
+
+
 def run(
         vpc_ids: list,
         managed_sg_name: str = 'AllowGitHubWebhooks'
-) -> None:
-    """Updates security groups to have current GitHub Ranges Only"""
-    secgroup_ids = get_or_create_secgroups(vpc_ids, managed_sg_name)
+) -> None:  # pragma: no cover
+    """
+        Updates security groups to have current GitHub Ranges Only
+
+        This has "pragma: no cover" set as it just calls other tested methods
+        This function should have NO EXTRA logic.
+    """
+    secgroups = get_or_create_secgroups(vpc_ids, managed_sg_name)
     ip_ranges = get_github_ips()
 
-    for secgrp_id in secgroup_ids:
-        EC2.update_security_group_rule_descriptions_ingress(
-            GroupId=secgrp_id,
-            IpPermissions=[
-                {
-                    'FromPort': 443,
-                    'ToPort': 443,
-                    'IpProtocol': 'tcp',
-                    'IpRanges': [{'CidrIp': ip_range} for ip_range in ip_ranges]
-                }
-            ]
-        )
+    for secgroup in secgroups:
+        update_security_group(secgroup, ip_ranges)
