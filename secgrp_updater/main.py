@@ -95,8 +95,6 @@ def update_security_group(
         ip_ranges: list
 ) -> None:
     """ Updates an individual security group """
-    print(group)
-
     current_ranges = set()
     for ip_permission in group['IpPermissions']:
         for ip_range in ip_permission['IpRanges']:
