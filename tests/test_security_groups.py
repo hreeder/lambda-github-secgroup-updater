@@ -3,8 +3,6 @@
 """
 import unittest
 
-import responses
-
 from botocore.stub import Stubber
 
 from secgrp_updater import main
@@ -167,66 +165,6 @@ class TestSecurityGroups(unittest.TestCase):
 
             self.assertEqual(0, len(result))
             self.stubber.assert_no_pending_responses()
-
-    # @responses.activate
-    # def test_update_sec_groups(self):
-    #     """
-    #         Test the actual run function to know if security groups have been updated
-    #     """
-    #     responses.add(
-    #         responses.GET,
-    #         'https://api.github.com/meta',
-    #         json={'hooks': self.allowed_ranges}
-    #     )
-
-    #     mock_describe_response = {
-    #         'SecurityGroups': [self.managed_sg, self.managed_sg_2]
-    #     }
-    #     expected_describe_params = {'GroupNames': [self.default_managed_group_name]}
-    #     self.stubber.add_response(
-    #         'describe_security_groups',
-    #         mock_describe_response,
-    #         expected_describe_params
-    #     )
-
-    #     expected_update_params_1 = {
-    #         'GroupId': f'sg-{self.managed_id}',
-    #         'IpPermissions': [
-    #             {
-    #                 'FromPort': 443,
-    #                 'ToPort': 443,
-    #                 'IpProtocol': 'tcp',
-    #                 'IpRanges': [{'CidrIp': ip_range} for ip_range in self.allowed_ranges]
-    #             }
-    #         ]
-    #     }
-    #     expected_update_params_2 = {
-    #         'GroupId': f'sg-{self.managed_id_2}',
-    #         'IpPermissions': [
-    #             {
-    #                 'FromPort': 443,
-    #                 'ToPort': 443,
-    #                 'IpProtocol': 'tcp',
-    #                 'IpRanges': [{'CidrIp': ip_range} for ip_range in self.allowed_ranges]
-    #             }
-    #         ]
-    #     }
-
-    #     self.stubber.add_response(
-    #         'update_security_group_rule_descriptions_ingress',
-    #         {},
-    #         expected_update_params_1
-    #     )
-    #     self.stubber.add_response(
-    #         'update_security_group_rule_descriptions_ingress',
-    #         {},
-    #         expected_update_params_2
-    #     )
-
-    #     with self.stubber:
-    #         main.run([f'vpc-{self.managed_id}', f'vpc-{self.managed_id_2}'])
-
-    #         self.stubber.assert_no_pending_responses()
 
     def test_update_security_group_adds_rules(self):
         """ Test update_security_group adds correct rules """
